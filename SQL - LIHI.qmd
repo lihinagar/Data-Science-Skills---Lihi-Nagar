@@ -1,0 +1,87 @@
+---
+title: "Paper - SQL"
+format: html
+editor: visual
+---
+
+## Running Code
+
+```{r}
+setwd("C:/Users/lihin/OneDrive/מסמכים/MA/קורסים/מיומנות")
+
+ con_chocolate <- DBI::dbConnect(drv = RSQLite::SQLite(),
+ dbname = "chocolate.sqlite")
+```
+
+**Q1**: What the boss wanted was a table with two columns: names of sale representatives and the total amount of candy bars they sold. Specifically, he wanted this for 2022 and for sale representatives who joined the company in 2010.
+
+```{sql, connection = con_chocolate, output.var = "Q1_output"}
+
+SELECT salesreps.Name, SUM(orders.amount) AS total_candy_bars_sold
+ FROM salesreps INNER JOIN orders USING (srid)
+ WHERE
+ orders.sale_date BETWEEN '2022-01-01' AND '2022-12-31'
+ AND salesreps.year_joined = 2010
+ GROUP BY salesreps.Name;
+```
+
+The answer is a table containing three sale representatives, and their the total candy bars the sold.
+
+```{r}
+print(Q1_output)
+```
+
+**Q2**: A frequency table.
+
+The inner brackets check how many orders each customer has made. The outer brackets check the frequency of the different order quantities, and store this as N. The result is a table containing the numbers of orders that have been made and their frequency.
+
+```{sql, connection = con_chocolate, output.var = "Q2_output"}
+
+SELECT total_number_of_order, COUNT(total_number_of_order) AS N
+FROM (
+SELECT COUNT(orders.cid) AS total_number_of_order
+FROM orders
+GROUP BY cid)  
+GROUP BY total_number_of_order
+```
+
+```{r}
+print(Q2_output)
+```
+
+**Q3**: The best-selling candy bar in the first quarter is "Coconut Carve". Also, the sales representative who sold this bar the most in the second quarter is Christopher Hess.
+
+```{sql, connection = con_chocolate, output.var = "Q3_output"}
+
+WITH sales_summary AS (
+SELECT SUM(orders.amount) AS total_sales, orders.pid AS candy, products.candy_names AS names 
+FROM orders
+INNER JOIN products 
+ON orders.pid = products.pid
+WHERE orders.sale_date BETWEEN '2022-01-01' AND '2022-03-31'
+GROUP BY orders.pid
+), 
+best_candy AS(
+SELECT candy, names
+FROM sales_summary
+WHERE total_sales = (
+    SELECT MAX(total_sales)
+    FROM sales_summary)
+),
+best_sales_rep AS(
+select salesreps.Name, orders.srid, sum(orders.amount) AS total
+FROM orders
+INNER JOIN salesreps 
+ON orders.srid = salesreps.srid
+WHERE orders.pid = (SELECT candy FROM best_candy)
+AND orders.sale_date BETWEEN '2022-04-01' AND '2022-06-31'
+GROUP BY orders.srid
+ORDER BY total DESC
+LIMIT 1
+)
+
+SELECT 
+    (SELECT names FROM best_candy) AS best_candy,
+    (SELECT Name FROM best_sales_rep) AS best_sales_rep
+
+```
